@@ -1,0 +1,15 @@
+{
+  "extends": "solhint:recommended",
+  "rules": {
+    "code-complexity": ["error", 10],
+    "compiler-version": ["error", "^0.8.0"],
+    "func-visibility": ["warn", { "ignoreConstructors": true }],
+    "not-rely-on-time": "off",
+    "no-empty-blocks": "off"
+  }
+}
+
+
+
+
+
