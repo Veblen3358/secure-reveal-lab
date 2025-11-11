@@ -51,6 +51,12 @@ contract SurveyReveal is SepoliaConfig {
     event DecryptionRequested(uint256 indexed surveyId, address indexed respondent, uint256 requestId);
     event ResponseRevealed(uint256 indexed surveyId, address indexed respondent, uint8[] answers);
 
+    // Modifiers
+    modifier pollExists(uint256 surveyId) {
+        require(surveyId < _surveyCount, "Invalid survey");
+        _;
+    }
+
     /// @notice Create a new survey with custom questions
     /// @param title The survey title
     /// @param questions Array of question texts
@@ -208,6 +214,55 @@ contract SurveyReveal is SepoliaConfig {
     /// @notice Get total number of surveys
     function getSurveyCount() external view returns (uint256) {
         return _surveyCount;
+    }
+
+    /// @notice Get survey statistics
+    /// @param surveyId The survey ID
+    /// @return responseCount Total number of responses
+    /// @return isActive Whether survey is currently active
+    /// @return timeRemaining Seconds remaining until survey ends (0 if ended)
+    /// @return questionCount Number of questions in the survey
+    function getSurveyStats(uint256 surveyId)
+        external
+        view
+        pollExists(surveyId)
+        returns (uint256 responseCount, bool isActive, uint256 timeRemaining, uint8 questionCount)
+    {
+        Survey storage s = _surveys[surveyId];
+        responseCount = s.responseCount;
+        questionCount = s.questionCount;
+
+        uint256 currentTime = block.timestamp;
+        if (currentTime >= s.startTime && currentTime <= s.endTime) {
+            isActive = true;
+            timeRemaining = s.endTime - currentTime;
+        } else {
+            isActive = false;
+            timeRemaining = 0;
+        }
+    }
+
+    /// @notice Emergency pause survey for creator
+    /// @param surveyId The survey ID to pause
+    function emergencyPause(uint256 surveyId) external pollExists(surveyId) {
+        Survey storage s = _surveys[surveyId];
+        require(msg.sender == s.creator, "Only survey creator can pause");
+
+        // Mark survey as ended to prevent further responses
+        s.endTime = block.timestamp;
+        s.isRevealed = true;
+    }
+
+    /// @notice Get survey creator
+    /// @param surveyId The survey ID
+    /// @return creator Address of the survey creator
+    function getSurveyCreator(uint256 surveyId)
+        external
+        view
+        pollExists(surveyId)
+        returns (address creator)
+    {
+        return _surveys[surveyId].creator;
     }
 
     /// @notice Get encrypted response (returns bytes32 handles)
