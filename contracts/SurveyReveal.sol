@@ -189,6 +189,22 @@ contract SurveyReveal is SepoliaConfig {
     }
 
 
+    /// @notice Get survey details
+    /// @param surveyId The survey ID
+    function getSurvey(uint256 surveyId) external view returns (
+        string memory title,
+        string[] memory questions,
+        address creator,
+        uint64 startTime,
+        uint64 endTime,
+        uint256 responseCount,
+        uint8 questionCount
+    ) {
+        require(surveyId < _surveyCount, "Invalid survey");
+        Survey storage s = _surveys[surveyId];
+        return (s.title, s.questions, s.creator, s.startTime, s.endTime, s.responseCount, s.questionCount);
+    }
+
     /// @notice Get total number of surveys
     function getSurveyCount() external view returns (uint256) {
         return _surveyCount;
