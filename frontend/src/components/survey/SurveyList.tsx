@@ -17,10 +17,13 @@ interface Survey {
   questionCount: number;
 }
 
+type FilterType = "all" | "active" | "ended" | "my-surveys";
+
 export function SurveyList({ onSurveySelect }: SurveyListProps) {
   const chainId = useChainId();
   const contractAddress = getContractAddress(chainId);
   const [surveys, setSurveys] = useState<Survey[]>([]);
+  const [filter, setFilter] = useState<FilterType>("all");
   const [isLoading, setIsLoading] = useState(false);
   const publicClient = usePublicClient();
   const { data: blockNumber } = useBlockNumber({ watch: true }); // Watch for new blocks
