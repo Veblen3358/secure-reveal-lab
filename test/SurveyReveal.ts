@@ -255,4 +255,63 @@ describe("SurveyReveal", function () {
         .to.be.revertedWith("Invalid times");
     });
   });
+
+  describe("Batch Operations", function () {
+    it("Should create multiple surveys in batch", async function () {
+      const titles = ["Survey 1", "Survey 2"];
+      const questionsArray = [
+        ["Q1", "Q2"],
+        ["Q3", "Q4", "Q5"]
+      ];
+      const startTimes = [
+        BigInt(Math.floor(Date.now() / 1000) + 60),
+        BigInt(Math.floor(Date.now() / 1000) + 120)
+      ];
+      const endTimes = [
+        BigInt(Math.floor(Date.now() / 1000) + 3660),
+        BigInt(Math.floor(Date.now() / 1000) + 3720)
+      ];
+
+      const surveyIds = await surveyReveal.createMultipleSurveys(titles, questionsArray, startTimes, endTimes);
+
+      expect(surveyIds.length).to.equal(2);
+      expect(await surveyReveal.getSurveyCount()).to.be.greaterThanOrEqual(2);
+    });
+
+    it("Should reject batch creation with mismatched array lengths", async function () {
+      const titles = ["Survey 1", "Survey 2"];
+      const questionsArray = [["Q1"]]; // Different length
+      const startTimes = [BigInt(Math.floor(Date.now() / 1000) + 60)];
+      const endTimes = [BigInt(Math.floor(Date.now() / 1000) + 3660)];
+
+      await expect(surveyReveal.createMultipleSurveys(titles, questionsArray, startTimes, endTimes))
+        .to.be.revertedWith("Array length mismatch");
+    });
+
+    it("Should enforce batch creation limits", async function () {
+      const titles = Array.from({ length: 6 }, (_, i) => `Survey ${i + 1}`); // Too many
+      const questionsArray = Array.from({ length: 6 }, () => ["Question"]);
+      const startTimes = Array.from({ length: 6 }, () => BigInt(Math.floor(Date.now() / 1000) + 60));
+      const endTimes = Array.from({ length: 6 }, () => BigInt(Math.floor(Date.now() / 1000) + 3660));
+
+      await expect(surveyReveal.createMultipleSurveys(titles, questionsArray, startTimes, endTimes))
+        .to.be.revertedWith("Invalid number of surveys (1-5)");
+    });
+  });
+
+  describe("Contract Metadata", function () {
+    it("Should return correct contract version", async function () {
+      const version = await surveyReveal.getVersion();
+      expect(version).to.equal("1.1.0");
+    });
+
+    it("Should return supported operations", async function () {
+      const operations = await surveyReveal.getSupportedOperations();
+      expect(operations).to.deep.equal([
+        "encrypted_response",
+        "homomorphic_aggregation",
+        "decryption_reveal"
+      ]);
+    });
+  });
 });
