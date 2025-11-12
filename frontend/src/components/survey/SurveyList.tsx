@@ -311,6 +311,19 @@ function SurveyCard({ survey, status, onSelect, formatDate }: SurveyCardProps) {
       <div style={statusBadgeStyle(status)}>
         {status}
       </div>
+
+      {status === 'Active' && (
+        <div style={{
+          position: 'absolute',
+          top: '8px',
+          right: '8px',
+          width: '8px',
+          height: '8px',
+          backgroundColor: '#10b981',
+          borderRadius: '50%',
+          animation: 'pulse 2s infinite'
+        }} />
+      )}
     </div>
   );
 }
