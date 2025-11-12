@@ -157,4 +157,102 @@ describe("SurveyReveal", function () {
       expect(creator).to.equal(signers.deployer.address);
     });
   });
+
+  describe("Survey Statistics", function () {
+    let surveyId: bigint;
+
+    beforeEach(async function () {
+      const title = "Stats Test Survey";
+      const questions = ["Question 1", "Question 2", "Question 3"];
+      const startTime = Math.floor(Date.now() / 1000) - 60; // 1 minute ago (active)
+      const endTime = startTime + 3600; // 1 hour later
+
+      const tx = await surveyReveal.createSurvey(title, questions, startTime, endTime);
+      await tx.wait();
+
+      surveyId = 0n;
+    });
+
+    it("Should provide accurate survey statistics", async function () {
+      const [responseCount, isActive, timeRemaining, questionCount] = await surveyReveal.getSurveyStats(surveyId);
+
+      expect(responseCount).to.equal(0);
+      expect(isActive).to.be.true;
+      expect(timeRemaining).to.be.greaterThan(0);
+      expect(questionCount).to.equal(3);
+    });
+
+    it("Should track survey activity status correctly", async function () {
+      // Active survey
+      let [, isActive] = await surveyReveal.getSurveyStats(surveyId);
+      expect(isActive).to.be.true;
+
+      // Note: In real scenario, we'd test ended surveys too
+    });
+  });
+
+  describe("Emergency Controls", function () {
+    it("Should allow survey creator to emergency pause", async function () {
+      // Create a survey
+      const title = "Emergency Test";
+      const questions = ["Question 1"];
+      const startTime = Math.floor(Date.now() / 1000) + 60;
+      const endTime = startTime + 3600;
+
+      const tx = await surveyReveal.createSurvey(title, questions, startTime, endTime);
+      await tx.wait();
+
+      // Emergency pause by creator
+      await expect(surveyReveal.emergencyPause(0)).to.not.be.reverted;
+
+      // Check that survey is now ended
+      const [, , , endTimeAfter] = await surveyReveal.getSurvey(0);
+      expect(endTimeAfter).to.be.lessThan(endTime);
+    });
+
+    it("Should prevent non-creator from emergency pausing", async function () {
+      // Create a survey
+      const title = "Emergency Test";
+      const questions = ["Question 1"];
+      const startTime = Math.floor(Date.now() / 1000) + 60;
+      const endTime = startTime + 3600;
+
+      const tx = await surveyReveal.createSurvey(title, questions, startTime, endTime);
+      await tx.wait();
+
+      // Try to pause from different account
+      await expect(surveyReveal.connect(signers.alice).emergencyPause(0))
+        .to.be.revertedWith("Only survey creator can pause");
+    });
+  });
+
+  describe("Input Validation", function () {
+    it("Should enforce question count limits", async function () {
+      // Test maximum questions (10)
+      const title = "Max Questions";
+      const questions = Array.from({ length: 10 }, (_, i) => `Question ${i + 1}`);
+      const startTime = Math.floor(Date.now() / 1000) + 60;
+      const endTime = startTime + 3600;
+
+      await expect(surveyReveal.createSurvey(title, questions, startTime, endTime))
+        .to.not.be.reverted;
+
+      // Test too many questions (11)
+      const tooManyQuestions = Array.from({ length: 11 }, (_, i) => `Question ${i + 1}`);
+      await expect(surveyReveal.createSurvey("Too Many", tooManyQuestions, startTime, endTime))
+        .to.be.revertedWith("Invalid question count");
+    });
+
+    it("Should validate survey timing constraints", async function () {
+      const title = "Timing Test";
+      const questions = ["Question 1"];
+
+      // End time before start time
+      const startTime = Math.floor(Date.now() / 1000) + 3600;
+      const endTime = startTime - 100;
+
+      await expect(surveyReveal.createSurvey(title, questions, startTime, endTime))
+        .to.be.revertedWith("Invalid times");
+    });
+  });
 });
