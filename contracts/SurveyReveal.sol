@@ -306,6 +306,61 @@ contract SurveyReveal is SepoliaConfig {
     function isResponseRevealed(uint256 surveyId, address respondent) external view returns (bool) {
         return _revealedResponses[surveyId][respondent].respondent != address(0);
     }
+
+    /// @notice Create multiple surveys in a single transaction (gas optimized)
+    /// @param titles Array of survey titles
+    /// @param questionsArray Array of question arrays for each survey
+    /// @param startTimes Array of start times for each survey
+    /// @param endTimes Array of end times for each survey
+    /// @return surveyIds Array of created survey IDs
+    function createMultipleSurveys(
+        string[] calldata titles,
+        string[][] calldata questionsArray,
+        uint64[] calldata startTimes,
+        uint64[] calldata endTimes
+    ) external returns (uint256[] memory surveyIds) {
+        require(titles.length == questionsArray.length &&
+                questionsArray.length == startTimes.length &&
+                startTimes.length == endTimes.length, "Array length mismatch");
+        require(titles.length > 0 && titles.length <= 5, "Invalid number of surveys (1-5)");
+
+        surveyIds = new uint256[](titles.length);
+
+        for (uint256 i = 0; i < titles.length; i++) {
+            surveyIds[i] = _surveyCount++;
+            Survey storage s = _surveys[surveyIds[i]];
+
+            require(bytes(titles[i]).length > 0 && bytes(titles[i]).length <= MAX_TITLE_LENGTH, "Invalid title");
+            require(questionsArray[i].length >= MIN_QUESTIONS && questionsArray[i].length <= MAX_QUESTIONS, "Invalid questions");
+
+            s.title = titles[i];
+            s.questions = questionsArray[i];
+            s.creator = msg.sender;
+            s.startTime = startTimes[i];
+            s.endTime = endTimes[i];
+            s.isRevealed = false;
+            s.responseCount = 0;
+            s.questionCount = uint8(questionsArray[i].length);
+
+            emit SurveyCreated(surveyIds[i], titles[i], msg.sender, uint8(questionsArray[i].length));
+        }
+    }
+
+    /// @notice Get contract version for compatibility checks
+    /// @return version Contract version string
+    function getVersion() external pure returns (string memory version) {
+        return "1.1.0";
+    }
+
+    /// @notice Get supported FHE operations
+    /// @return supportedOperations Array of supported operation names
+    function getSupportedOperations() external pure returns (string[] memory supportedOperations) {
+        supportedOperations = new string[](3);
+        supportedOperations[0] = "encrypted_response";
+        supportedOperations[1] = "homomorphic_aggregation";
+        supportedOperations[2] = "decryption_reveal";
+        return supportedOperations;
+    }
 }
 
 
