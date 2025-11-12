@@ -8,6 +8,11 @@ import {SepoliaConfig} from "@fhevm/solidity/config/ZamaConfig.sol";
 /// @notice A survey system where users can submit encrypted answers and reveal them later
 /// @dev Uses FHE encryption for privacy-preserving survey responses
 contract SurveyReveal is SepoliaConfig {
+    // Constants for gas optimization
+    uint256 private constant MAX_QUESTIONS = 10;
+    uint256 private constant MIN_QUESTIONS = 1;
+    uint256 private constant MAX_TITLE_LENGTH = 200;
+
     struct Survey {
         string title;
         string[] questions; // Dynamic array of questions
@@ -69,8 +74,8 @@ contract SurveyReveal is SepoliaConfig {
         uint64 startTime,
         uint64 endTime
     ) external returns (uint256 surveyId) {
-        require(bytes(title).length > 0, "Empty title");
-        require(questions.length > 0 && questions.length <= 10, "Invalid question count");
+        require(bytes(title).length > 0 && bytes(title).length <= MAX_TITLE_LENGTH, "Invalid title length");
+        require(questions.length >= MIN_QUESTIONS && questions.length <= MAX_QUESTIONS, "Invalid question count");
         require(endTime > startTime && endTime > block.timestamp, "Invalid times");
 
         surveyId = _surveyCount++;
