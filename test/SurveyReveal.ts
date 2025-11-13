@@ -297,6 +297,33 @@ describe("SurveyReveal", function () {
       await expect(surveyReveal.createMultipleSurveys(titles, questionsArray, startTimes, endTimes))
         .to.be.revertedWith("Invalid number of surveys (1-5)");
     });
+
+    it("Should validate batch survey parameters", async function () {
+      // Test with empty title
+      const titles = ["", "Valid Survey"];
+      const questionsArray = [["Q1"], ["Q2"]];
+      const startTimes = [BigInt(Math.floor(Date.now() / 1000) + 60), BigInt(Math.floor(Date.now() / 1000) + 120)];
+      const endTimes = [BigInt(Math.floor(Date.now() / 1000) + 3660), BigInt(Math.floor(Date.now() / 1000) + 3720)];
+
+      await expect(surveyReveal.createMultipleSurveys(titles, questionsArray, startTimes, endTimes))
+        .to.be.revertedWith("Invalid title");
+    });
+
+    it("Should handle maximum batch efficiency", async function () {
+      const titles = ["Survey 1", "Survey 2", "Survey 3", "Survey 4", "Survey 5"]; // Maximum allowed
+      const questionsArray = [
+        ["Q1"], ["Q2"], ["Q3"], ["Q4"], ["Q5"]
+      ];
+      const startTimes = Array.from({ length: 5 }, () => BigInt(Math.floor(Date.now() / 1000) + 60));
+      const endTimes = Array.from({ length: 5 }, () => BigInt(Math.floor(Date.now() / 1000) + 3660));
+
+      const initialCount = await surveyReveal.getSurveyCount();
+      const surveyIds = await surveyReveal.createMultipleSurveys(titles, questionsArray, startTimes, endTimes);
+      const finalCount = await surveyReveal.getSurveyCount();
+
+      expect(surveyIds.length).to.equal(5);
+      expect(Number(finalCount) - Number(initialCount)).to.equal(5);
+    });
   });
 
   describe("Contract Metadata", function () {
