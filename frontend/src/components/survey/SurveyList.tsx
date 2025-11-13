@@ -25,6 +25,7 @@ export function SurveyList({ onSurveySelect }: SurveyListProps) {
   const [surveys, setSurveys] = useState<Survey[]>([]);
   const [filter, setFilter] = useState<FilterType>("all");
   const [isLoading, setIsLoading] = useState(false);
+  const [totalSurveys, setTotalSurveys] = useState<number>(0);
   const publicClient = usePublicClient();
   const { data: blockNumber } = useBlockNumber({ watch: true }); // Watch for new blocks
 
