@@ -324,6 +324,30 @@ describe("SurveyReveal", function () {
       expect(surveyIds.length).to.equal(5);
       expect(Number(finalCount) - Number(initialCount)).to.equal(5);
     });
+
+    it("Should maintain survey integrity in batch operations", async function () {
+      const titles = ["Batch Survey A", "Batch Survey B"];
+      const questionsArray = [
+        ["What is your favorite color?", "Rate our service"],
+        ["How often do you use our product?"]
+      ];
+      const startTimes = [BigInt(Math.floor(Date.now() / 1000) + 60), BigInt(Math.floor(Date.now() / 1000) + 120)];
+      const endTimes = [BigInt(Math.floor(Date.now() / 1000) + 3660), BigInt(Math.floor(Date.now() / 1000) + 3720)];
+
+      const surveyIds = await surveyReveal.createMultipleSurveys(titles, questionsArray, startTimes, endTimes);
+
+      // Verify each survey was created correctly
+      for (let i = 0; i < surveyIds.length; i++) {
+        const [title, questions, creator, startTime, endTime, responseCount, questionCount] =
+          await surveyReveal.getSurvey(surveyIds[i]);
+
+        expect(title).to.equal(titles[i]);
+        expect(questions).to.deep.equal(questionsArray[i]);
+        expect(creator).to.equal(signers.deployer.address);
+        expect(questionCount).to.equal(questionsArray[i].length);
+        expect(responseCount).to.equal(0);
+      }
+    });
   });
 
   describe("Contract Metadata", function () {
