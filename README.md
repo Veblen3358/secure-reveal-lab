@@ -6,7 +6,7 @@ A privacy-preserving survey platform built with Fully Homomorphic Encryption (FH
 
 **Deployed Application**: [https://secure-reveal.vercel.app/](https://secure-reveal.vercel.app/)
 
-📹 **Demo Video**: [Watch the demo](https://github.com/Veblen3358/secure-reveal-lab/raw/main/secure-reveal.mp4)
+📹 **Demo Video**: [Watch the demo](https://github.com/Veblen3358/secure-reveal-lab/blob/main//secure-reveal.mp4)
 
 ## Features
 
