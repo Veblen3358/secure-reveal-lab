@@ -305,6 +305,11 @@ function SurveyCard({ survey, status, onSelect, formatDate }: SurveyCardProps) {
         <span>👤</span>
         <span>Creator: {survey.creator.slice(0, 6)}...{survey.creator.slice(-4)}</span>
       </div>
+
+      <div style={{ ...surveyInfoStyle, fontSize: '12px', color: '#9ca3af' }}>
+        <span>📊</span>
+        <span>Survey #{survey.id} • {survey.questionCount} questions</span>
+      </div>
       
       <div style={surveyInfoStyle}>
         <span>📅</span>
