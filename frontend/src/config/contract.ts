@@ -1,6 +1,6 @@
 // Contract addresses for different networks
 export const CONTRACT_ADDRESSES: Record<number, string> = {
-  31337: '0x5FbDB2315678afecb367f032d93F642f64180aa3', // Localhost
+  31337: '0x5FbDB2315678afecb367f032d93F642f64180aa3', // Localhost - Latest deployment with statistics
   11155111: '0x6a83972c779E237E7f2A1c562aa20257C7a90Ea0', // Sepolia - Latest deployment
 };
 

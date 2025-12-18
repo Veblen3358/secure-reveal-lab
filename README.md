@@ -4,18 +4,14 @@ A privacy-preserving survey platform built with Fully Homomorphic Encryption (FH
 
 ## 🚀 Live Demo
 
-**Deployed Application**: [https://secure-reveal.vercel.app/](https://secure-reveal.vercel.app/)
+**Deployed Application**: [https://secure-reveal-lab.vercel.app/](https://secure-reveal-lab.vercel.app/)
 
 📹 **Demo Video**: [Watch the demo](https://github.com/Veblen3358/secure-reveal-lab/blob/main//secure-reveal.mp4)
 
 ## Features
 
 - **Encrypted Survey Responses**: All answers are encrypted on-chain using FHE technology
-- **Dynamic Surveys**: Create surveys with custom questions (1-10 questions) with gas optimization
-- **Batch Survey Creation**: Create multiple surveys in a single transaction for efficiency
-- **Survey Statistics**: Real-time response count and survey status tracking
-- **Emergency Controls**: Survey creators can pause surveys for security reasons
-- **Survey Filtering**: Advanced filtering system for better survey management
+- **Dynamic Surveys**: Create surveys with custom questions (up to 10 questions)
 - **Selective Decryption**: Survey creators can request decryption of individual responses
 - **Privacy-Preserving**: Individual answers remain encrypted until explicitly revealed
 - **Time-Bounded**: Surveys have defined start and end times

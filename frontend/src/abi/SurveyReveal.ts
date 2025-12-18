@@ -361,6 +361,49 @@ export const SURVEY_REVEAL_ABI = [
     "type": "function"
   },
   {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "surveyId",
+        "type": "uint256"
+      }
+    ],
+    "name": "getRespondents",
+    "outputs": [
+      {
+        "internalType": "address[]",
+        "name": "",
+        "type": "address[]"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "surveyId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint8",
+        "name": "questionIndex",
+        "type": "uint8"
+      }
+    ],
+    "name": "getEncryptedSum",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "sumHandle",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
     "inputs": [],
     "name": "protocolId",
     "outputs": [

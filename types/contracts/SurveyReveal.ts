@@ -29,6 +29,8 @@ export interface SurveyRevealInterface extends Interface {
       | "createSurvey"
       | "decryptionCallback"
       | "getEncryptedResponse"
+      | "getEncryptedSum"
+      | "getRespondents"
       | "getRevealedResponse"
       | "getSurvey"
       | "getSurveyCount"
@@ -59,6 +61,14 @@ export interface SurveyRevealInterface extends Interface {
   encodeFunctionData(
     functionFragment: "getEncryptedResponse",
     values: [BigNumberish, AddressLike]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "getEncryptedSum",
+    values: [BigNumberish, BigNumberish]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "getRespondents",
+    values: [BigNumberish]
   ): string;
   encodeFunctionData(
     functionFragment: "getRevealedResponse",
@@ -107,6 +117,14 @@ export interface SurveyRevealInterface extends Interface {
   ): Result;
   decodeFunctionResult(
     functionFragment: "getEncryptedResponse",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "getEncryptedSum",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "getRespondents",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
@@ -298,6 +316,18 @@ export interface SurveyReveal extends BaseContract {
     "view"
   >;
 
+  getEncryptedSum: TypedContractMethod<
+    [surveyId: BigNumberish, questionIndex: BigNumberish],
+    [string],
+    "view"
+  >;
+
+  getRespondents: TypedContractMethod<
+    [surveyId: BigNumberish],
+    [string[]],
+    "view"
+  >;
+
   getRevealedResponse: TypedContractMethod<
     [surveyId: BigNumberish, respondent: AddressLike],
     [[bigint[], string] & { answers: bigint[]; responder: string }],
@@ -384,6 +414,16 @@ export interface SurveyReveal extends BaseContract {
     [string[]],
     "view"
   >;
+  getFunction(
+    nameOrSignature: "getEncryptedSum"
+  ): TypedContractMethod<
+    [surveyId: BigNumberish, questionIndex: BigNumberish],
+    [string],
+    "view"
+  >;
+  getFunction(
+    nameOrSignature: "getRespondents"
+  ): TypedContractMethod<[surveyId: BigNumberish], [string[]], "view">;
   getFunction(
     nameOrSignature: "getRevealedResponse"
   ): TypedContractMethod<

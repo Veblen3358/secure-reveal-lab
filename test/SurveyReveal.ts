@@ -1,368 +1,310 @@
+import { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers";
+import { ethers, fhevm } from "hardhat";
+import { SurveyReveal, SurveyReveal__factory } from "../types";
 import { expect } from "chai";
-import { ethers } from "hardhat";
-import { SurveyReveal } from "../types/contracts/SurveyReveal";
-import { Signers } from "../types/common";
+import { FhevmType } from "@fhevm/hardhat-plugin";
+
+type Signers = {
+  deployer: HardhatEthersSigner;
+  alice: HardhatEthersSigner;
+  bob: HardhatEthersSigner;
+};
+
+async function deployFixture() {
+  const factory = (await ethers.getContractFactory("SurveyReveal")) as SurveyReveal__factory;
+  const surveyContract = (await factory.deploy()) as SurveyReveal;
+  const surveyContractAddress = await surveyContract.getAddress();
+
+  return { surveyContract, surveyContractAddress };
+}
 
 describe("SurveyReveal", function () {
-  let surveyReveal: SurveyReveal;
   let signers: Signers;
+  let surveyContract: SurveyReveal;
+  let surveyContractAddress: string;
 
   before(async function () {
-    signers = {
-      deployer: (await ethers.getSigners())[0],
-      alice: (await ethers.getSigners())[1],
-      bob: (await ethers.getSigners())[2],
-    };
+    const ethSigners: HardhatEthersSigner[] = await ethers.getSigners();
+    signers = { deployer: ethSigners[0], alice: ethSigners[1], bob: ethSigners[2] };
   });
 
   beforeEach(async function () {
-    const SurveyRevealFactory = await ethers.getContractFactory("SurveyReveal");
-    surveyReveal = await SurveyRevealFactory.deploy();
-    await surveyReveal.waitForDeployment();
+    // Check whether the tests are running against an FHEVM mock environment
+    if (!fhevm.isMock) {
+      console.warn(`This hardhat test suite cannot run on Sepolia Testnet`);
+      this.skip();
+    }
+
+    ({ surveyContract, surveyContractAddress } = await deployFixture());
   });
 
-  describe("Deployment", function () {
-    it("Should deploy successfully", async function () {
-      expect(await surveyReveal.getAddress()).to.be.properAddress;
-    });
+  it("should create a survey successfully", async function () {
+    const currentTime = Math.floor(Date.now() / 1000);
+    const startTime = currentTime;
+    const endTime = currentTime + 86400; // 1 day later
 
-    it("Should start with zero surveys", async function () {
-      expect(await surveyReveal.getSurveyCount()).to.equal(0);
-    });
+    const questions = [
+      "Do you like in-game ads? (Yes=1 / No=0)",
+      "Are you satisfied with the current difficulty? (Satisfied=1 / Not Satisfied=0)",
+      "Rate game graphics (1-5)"
+    ];
+
+    const tx = await surveyContract.createSurvey(
+      "Game Feedback Survey",
+      questions,
+      startTime,
+      endTime,
+    );
+
+    await tx.wait();
+
+    const surveyCount = await surveyContract.getSurveyCount();
+    expect(surveyCount).to.equal(1);
+
+    const survey = await surveyContract.getSurvey(0);
+    expect(survey[0]).to.equal("Game Feedback Survey");
+    expect(survey[1]).to.deep.equal(questions); // questions array
+    expect(survey[2]).to.equal(signers.deployer.address); // creator
+    expect(survey[6]).to.equal(3); // questionCount
   });
 
-  describe("Survey Creation", function () {
-    it("Should create a survey with valid parameters", async function () {
-      const title = "Customer Satisfaction Survey";
-      const questions = ["How satisfied are you?", "Would you recommend us?"];
-      const startTime = Math.floor(Date.now() / 1000) + 60; // 1 minute from now
-      const endTime = startTime + 3600; // 1 hour later
+  it("should submit encrypted response successfully", async function () {
+    // Create a survey first
+    const currentTime = Math.floor(Date.now() / 1000);
+    const startTime = currentTime;
+    const endTime = currentTime + 86400;
 
-      const tx = await surveyReveal.createSurvey(title, questions, startTime, endTime);
-      await tx.wait();
+    const questions = [
+      "Do you like in-game ads?",
+      "Are you satisfied with the difficulty?",
+      "Rate game graphics (1-5)"
+    ];
 
-      expect(await surveyReveal.getSurveyCount()).to.equal(1);
-    });
+    await surveyContract.createSurvey(
+      "Game Feedback Survey",
+      questions,
+      startTime,
+      endTime,
+    );
 
-    it("Should reject survey creation with empty title", async function () {
-      const questions = ["Question 1"];
-      const startTime = Math.floor(Date.now() / 1000) + 60;
-      const endTime = startTime + 3600;
+    // Alice submits response
+    const answer1 = 1; // Yes
+    const answer2 = 1; // Satisfied
+    const answer3 = 5; // 5 stars
 
-      await expect(surveyReveal.createSurvey("", questions, startTime, endTime))
-        .to.be.revertedWith("Empty title");
-    });
+    const input = fhevm.createEncryptedInput(surveyContractAddress, signers.alice.address);
+    input.add8(answer1);
+    input.add8(answer2);
+    input.add8(answer3);
+    const encryptedInput = await input.encrypt();
 
-    it("Should reject survey creation with no questions", async function () {
-      const title = "Test Survey";
-      const questions: string[] = [];
-      const startTime = Math.floor(Date.now() / 1000) + 60;
-      const endTime = startTime + 3600;
+    const tx = await surveyContract.connect(signers.alice).submitResponse(
+      0,
+      [encryptedInput.handles[0], encryptedInput.handles[1], encryptedInput.handles[2]],
+      [encryptedInput.inputProof, encryptedInput.inputProof, encryptedInput.inputProof],
+    );
 
-      await expect(surveyReveal.createSurvey(title, questions, startTime, endTime))
-        .to.be.revertedWith("Invalid question count");
-    });
+    await tx.wait();
+
+    // Check that Alice has responded
+    const hasResponded = await surveyContract.hasResponded(0, signers.alice.address);
+    expect(hasResponded).to.be.true;
+
+    // Check response count
+    const survey = await surveyContract.getSurvey(0);
+    expect(survey[5]).to.equal(1); // responseCount
   });
 
-  describe("Survey Information", function () {
-    let surveyId: bigint;
+  it("should prevent double submission", async function () {
+    // Create a survey
+    const currentTime = Math.floor(Date.now() / 1000);
+    const startTime = currentTime;
+    const endTime = currentTime + 86400;
 
-    beforeEach(async function () {
-      const title = "Test Survey";
-      const questions = ["Question 1", "Question 2", "Question 3"];
-      const startTime = Math.floor(Date.now() / 1000) + 60;
-      const endTime = startTime + 3600;
+    const questions = ["Q1", "Q2", "Q3"];
 
-      const tx = await surveyReveal.createSurvey(title, questions, startTime, endTime);
-      await tx.wait();
+    await surveyContract.createSurvey(
+      "Test Survey",
+      questions,
+      startTime,
+      endTime,
+    );
 
-      surveyId = 0n; // First survey
-    });
+    // Alice submits first response
+    const input1 = fhevm.createEncryptedInput(surveyContractAddress, signers.alice.address);
+    input1.add8(1);
+    input1.add8(1);
+    input1.add8(3);
+    const encryptedInput1 = await input1.encrypt();
 
-    it("Should return correct survey information", async function () {
-      const [title, questions, creator, startTime, endTime, responseCount, questionCount] =
-        await surveyReveal.getSurvey(surveyId);
+    await surveyContract.connect(signers.alice).submitResponse(
+      0,
+      [encryptedInput1.handles[0], encryptedInput1.handles[1], encryptedInput1.handles[2]],
+      [encryptedInput1.inputProof, encryptedInput1.inputProof, encryptedInput1.inputProof],
+    );
 
-      expect(title).to.equal("Test Survey");
-      expect(questions).to.deep.equal(["Question 1", "Question 2", "Question 3"]);
-      expect(creator).to.equal(signers.deployer.address);
-      expect(questionCount).to.equal(3);
-      expect(responseCount).to.equal(0);
-    });
+    // Try to submit again (should fail)
+    const input2 = fhevm.createEncryptedInput(surveyContractAddress, signers.alice.address);
+    input2.add8(0);
+    input2.add8(0);
+    input2.add8(2);
+    const encryptedInput2 = await input2.encrypt();
 
-    it("Should reject access to non-existent surveys", async function () {
-      await expect(surveyReveal.getSurvey(999))
-        .to.be.revertedWith("Invalid survey");
-    });
+    await expect(
+      surveyContract.connect(signers.alice).submitResponse(
+        0,
+        [encryptedInput2.handles[0], encryptedInput2.handles[1], encryptedInput2.handles[2]],
+        [encryptedInput2.inputProof, encryptedInput2.inputProof, encryptedInput2.inputProof],
+      ),
+    ).to.be.revertedWith("Already responded");
   });
 
-  describe("Survey Response Logic", function () {
-    let surveyId: bigint;
+  it("should decrypt response using userDecrypt", async function () {
+    // Create a survey
+    const currentTime = Math.floor(Date.now() / 1000);
+    const startTime = currentTime;
+    const endTime = currentTime + 86400;
 
-    beforeEach(async function () {
-      const title = "Test Survey";
-      const questions = ["Question 1", "Question 2"];
-      const startTime = Math.floor(Date.now() / 1000) - 60; // 1 minute ago (already started)
-      const endTime = startTime + 7200; // 2 hours later
+    const questions = ["Q1", "Q2", "Q3"];
 
-      const tx = await surveyReveal.createSurvey(title, questions, startTime, endTime);
-      await tx.wait();
+    await surveyContract.createSurvey(
+      "Test Survey",
+      questions,
+      startTime,
+      endTime,
+    );
 
-      surveyId = 0n;
-    });
+    // Alice submits response
+    const answer1 = 1;
+    const answer2 = 0;
+    const answer3 = 4;
 
-    it("Should track respondent participation", async function () {
-      expect(await surveyReveal.hasResponded(surveyId, signers.alice.address)).to.be.false;
+    const input = fhevm.createEncryptedInput(surveyContractAddress, signers.alice.address);
+    input.add8(answer1);
+    input.add8(answer2);
+    input.add8(answer3);
+    const encryptedInput = await input.encrypt();
 
-      // In real FHE scenario, a response would be submitted here
-      // For now, we test the tracking mechanism
-      const [,,, responseCount] = await surveyReveal.getSurvey(surveyId);
-      expect(responseCount).to.equal(0);
-    });
+    await surveyContract.connect(signers.alice).submitResponse(
+      0,
+      [encryptedInput.handles[0], encryptedInput.handles[1], encryptedInput.handles[2]],
+      [encryptedInput.inputProof, encryptedInput.inputProof, encryptedInput.inputProof],
+    );
 
-    it("Should prevent multiple responses from same user", async function () {
-      // First response should succeed (in real FHE scenario)
-      // Second response should be rejected
-      expect(await surveyReveal.hasResponded(surveyId, signers.alice.address)).to.be.false;
-    });
+    // Get encrypted response handles
+    const encryptedResponse = await surveyContract.getEncryptedResponse(0, signers.alice.address);
+
+    // Decrypt each answer using userDecrypt
+    const decrypted1 = await fhevm.userDecryptEuint(
+      FhevmType.euint8,
+      encryptedResponse[0],
+      surveyContractAddress,
+      signers.alice,
+    );
+    const decrypted2 = await fhevm.userDecryptEuint(
+      FhevmType.euint8,
+      encryptedResponse[1],
+      surveyContractAddress,
+      signers.alice,
+    );
+    const decrypted3 = await fhevm.userDecryptEuint(
+      FhevmType.euint8,
+      encryptedResponse[2],
+      surveyContractAddress,
+      signers.alice,
+    );
+
+    // Verify decrypted values match original answers
+    expect(decrypted1).to.equal(answer1);
+    expect(decrypted2).to.equal(answer2);
+    expect(decrypted3).to.equal(answer3);
   });
 
-  describe("Decryption Logic", function () {
-    it("Should handle decryption requests", async function () {
-      // Create a survey
-      const title = "Decryption Test";
-      const questions = ["Question 1"];
-      const startTime = Math.floor(Date.now() / 1000) - 3600; // 1 hour ago
-      const endTime = startTime + 1800; // 30 minutes ago (already ended)
+  it("should get encrypted response handles", async function () {
+    // Create a survey
+    const currentTime = Math.floor(Date.now() / 1000);
+    const startTime = currentTime;
+    const endTime = currentTime + 86400;
 
-      const tx = await surveyReveal.createSurvey(title, questions, startTime, endTime);
-      await tx.wait();
+    const questions = ["Q1", "Q2", "Q3"];
 
-      // Request decryption
-      await expect(surveyReveal.requestDecryption(0, signers.alice.address)).to.not.be.reverted;
-    });
+    await surveyContract.createSurvey(
+      "Test Survey",
+      questions,
+      startTime,
+      endTime,
+    );
+
+    // Alice submits response
+    const input = fhevm.createEncryptedInput(surveyContractAddress, signers.alice.address);
+    input.add8(1);
+    input.add8(1);
+    input.add8(3);
+    const encryptedInput = await input.encrypt();
+
+    await surveyContract.connect(signers.alice).submitResponse(
+      0,
+      [encryptedInput.handles[0], encryptedInput.handles[1], encryptedInput.handles[2]],
+      [encryptedInput.inputProof, encryptedInput.inputProof, encryptedInput.inputProof],
+    );
+
+    // Get encrypted response handles
+    const encryptedResponse = await surveyContract.getEncryptedResponse(0, signers.alice.address);
+
+    // Verify we got 3 handles
+    expect(encryptedResponse.length).to.equal(3);
+    expect(encryptedResponse[0]).to.not.equal("0x0000000000000000000000000000000000000000000000000000000000000000");
+    expect(encryptedResponse[1]).to.not.equal("0x0000000000000000000000000000000000000000000000000000000000000000");
+    expect(encryptedResponse[2]).to.not.equal("0x0000000000000000000000000000000000000000000000000000000000000000");
   });
 
-  describe("Access Control", function () {
-    it("Should properly handle survey creator permissions", async function () {
-      const title = "Access Control Test";
-      const questions = ["Question 1"];
-      const startTime = Math.floor(Date.now() / 1000) + 60;
-      const endTime = startTime + 3600;
+  it("should allow multiple users to submit responses", async function () {
+    // Create a survey
+    const currentTime = Math.floor(Date.now() / 1000);
+    const startTime = currentTime;
+    const endTime = currentTime + 86400;
 
-      const tx = await surveyReveal.createSurvey(title, questions, startTime, endTime);
-      await tx.wait();
+    const questions = ["Q1", "Q2", "Q3"];
 
-      const [, , creator] = await surveyReveal.getSurvey(0);
-      expect(creator).to.equal(signers.deployer.address);
-    });
-  });
+    await surveyContract.createSurvey(
+      "Multi-User Survey",
+      questions,
+      startTime,
+      endTime,
+    );
 
-  describe("Survey Statistics", function () {
-    let surveyId: bigint;
+    // Alice submits
+    const inputAlice = fhevm.createEncryptedInput(surveyContractAddress, signers.alice.address);
+    inputAlice.add8(1);
+    inputAlice.add8(0);
+    inputAlice.add8(5);
+    const encryptedInputAlice = await inputAlice.encrypt();
 
-    beforeEach(async function () {
-      const title = "Stats Test Survey";
-      const questions = ["Question 1", "Question 2", "Question 3"];
-      const startTime = Math.floor(Date.now() / 1000) - 60; // 1 minute ago (active)
-      const endTime = startTime + 3600; // 1 hour later
+    await surveyContract.connect(signers.alice).submitResponse(
+      0,
+      [encryptedInputAlice.handles[0], encryptedInputAlice.handles[1], encryptedInputAlice.handles[2]],
+      [encryptedInputAlice.inputProof, encryptedInputAlice.inputProof, encryptedInputAlice.inputProof],
+    );
 
-      const tx = await surveyReveal.createSurvey(title, questions, startTime, endTime);
-      await tx.wait();
+    // Bob submits
+    const inputBob = fhevm.createEncryptedInput(surveyContractAddress, signers.bob.address);
+    inputBob.add8(0);
+    inputBob.add8(1);
+    inputBob.add8(3);
+    const encryptedInputBob = await inputBob.encrypt();
 
-      surveyId = 0n;
-    });
+    await surveyContract.connect(signers.bob).submitResponse(
+      0,
+      [encryptedInputBob.handles[0], encryptedInputBob.handles[1], encryptedInputBob.handles[2]],
+      [encryptedInputBob.inputProof, encryptedInputBob.inputProof, encryptedInputBob.inputProof],
+    );
 
-    it("Should provide accurate survey statistics", async function () {
-      const [responseCount, isActive, timeRemaining, questionCount] = await surveyReveal.getSurveyStats(surveyId);
+    // Check both responded
+    expect(await surveyContract.hasResponded(0, signers.alice.address)).to.be.true;
+    expect(await surveyContract.hasResponded(0, signers.bob.address)).to.be.true;
 
-      expect(responseCount).to.equal(0);
-      expect(isActive).to.be.true;
-      expect(timeRemaining).to.be.greaterThan(0);
-      expect(questionCount).to.equal(3);
-    });
-
-    it("Should track survey activity status correctly", async function () {
-      // Active survey
-      let [, isActive] = await surveyReveal.getSurveyStats(surveyId);
-      expect(isActive).to.be.true;
-
-      // Note: In real scenario, we'd test ended surveys too
-    });
-  });
-
-  describe("Emergency Controls", function () {
-    it("Should allow survey creator to emergency pause", async function () {
-      // Create a survey
-      const title = "Emergency Test";
-      const questions = ["Question 1"];
-      const startTime = Math.floor(Date.now() / 1000) + 60;
-      const endTime = startTime + 3600;
-
-      const tx = await surveyReveal.createSurvey(title, questions, startTime, endTime);
-      await tx.wait();
-
-      // Emergency pause by creator
-      await expect(surveyReveal.emergencyPause(0)).to.not.be.reverted;
-
-      // Check that survey is now ended
-      const [, , , endTimeAfter] = await surveyReveal.getSurvey(0);
-      expect(endTimeAfter).to.be.lessThan(endTime);
-    });
-
-    it("Should prevent non-creator from emergency pausing", async function () {
-      // Create a survey
-      const title = "Emergency Test";
-      const questions = ["Question 1"];
-      const startTime = Math.floor(Date.now() / 1000) + 60;
-      const endTime = startTime + 3600;
-
-      const tx = await surveyReveal.createSurvey(title, questions, startTime, endTime);
-      await tx.wait();
-
-      // Try to pause from different account
-      await expect(surveyReveal.connect(signers.alice).emergencyPause(0))
-        .to.be.revertedWith("Only survey creator can pause");
-    });
-  });
-
-  describe("Input Validation", function () {
-    it("Should enforce question count limits", async function () {
-      // Test maximum questions (10)
-      const title = "Max Questions";
-      const questions = Array.from({ length: 10 }, (_, i) => `Question ${i + 1}`);
-      const startTime = Math.floor(Date.now() / 1000) + 60;
-      const endTime = startTime + 3600;
-
-      await expect(surveyReveal.createSurvey(title, questions, startTime, endTime))
-        .to.not.be.reverted;
-
-      // Test too many questions (11)
-      const tooManyQuestions = Array.from({ length: 11 }, (_, i) => `Question ${i + 1}`);
-      await expect(surveyReveal.createSurvey("Too Many", tooManyQuestions, startTime, endTime))
-        .to.be.revertedWith("Invalid question count");
-    });
-
-    it("Should validate survey timing constraints", async function () {
-      const title = "Timing Test";
-      const questions = ["Question 1"];
-
-      // End time before start time
-      const startTime = Math.floor(Date.now() / 1000) + 3600;
-      const endTime = startTime - 100;
-
-      await expect(surveyReveal.createSurvey(title, questions, startTime, endTime))
-        .to.be.revertedWith("Invalid times");
-    });
-  });
-
-  describe("Batch Operations", function () {
-    it("Should create multiple surveys in batch", async function () {
-      const titles = ["Survey 1", "Survey 2"];
-      const questionsArray = [
-        ["Q1", "Q2"],
-        ["Q3", "Q4", "Q5"]
-      ];
-      const startTimes = [
-        BigInt(Math.floor(Date.now() / 1000) + 60),
-        BigInt(Math.floor(Date.now() / 1000) + 120)
-      ];
-      const endTimes = [
-        BigInt(Math.floor(Date.now() / 1000) + 3660),
-        BigInt(Math.floor(Date.now() / 1000) + 3720)
-      ];
-
-      const surveyIds = await surveyReveal.createMultipleSurveys(titles, questionsArray, startTimes, endTimes);
-
-      expect(surveyIds.length).to.equal(2);
-      expect(await surveyReveal.getSurveyCount()).to.be.greaterThanOrEqual(2);
-    });
-
-    it("Should reject batch creation with mismatched array lengths", async function () {
-      const titles = ["Survey 1", "Survey 2"];
-      const questionsArray = [["Q1"]]; // Different length
-      const startTimes = [BigInt(Math.floor(Date.now() / 1000) + 60)];
-      const endTimes = [BigInt(Math.floor(Date.now() / 1000) + 3660)];
-
-      await expect(surveyReveal.createMultipleSurveys(titles, questionsArray, startTimes, endTimes))
-        .to.be.revertedWith("Array length mismatch");
-    });
-
-    it("Should enforce batch creation limits", async function () {
-      const titles = Array.from({ length: 6 }, (_, i) => `Survey ${i + 1}`); // Too many
-      const questionsArray = Array.from({ length: 6 }, () => ["Question"]);
-      const startTimes = Array.from({ length: 6 }, () => BigInt(Math.floor(Date.now() / 1000) + 60));
-      const endTimes = Array.from({ length: 6 }, () => BigInt(Math.floor(Date.now() / 1000) + 3660));
-
-      await expect(surveyReveal.createMultipleSurveys(titles, questionsArray, startTimes, endTimes))
-        .to.be.revertedWith("Invalid number of surveys (1-5)");
-    });
-
-    it("Should validate batch survey parameters", async function () {
-      // Test with empty title
-      const titles = ["", "Valid Survey"];
-      const questionsArray = [["Q1"], ["Q2"]];
-      const startTimes = [BigInt(Math.floor(Date.now() / 1000) + 60), BigInt(Math.floor(Date.now() / 1000) + 120)];
-      const endTimes = [BigInt(Math.floor(Date.now() / 1000) + 3660), BigInt(Math.floor(Date.now() / 1000) + 3720)];
-
-      await expect(surveyReveal.createMultipleSurveys(titles, questionsArray, startTimes, endTimes))
-        .to.be.revertedWith("Invalid title");
-    });
-
-    it("Should handle maximum batch efficiency", async function () {
-      const titles = ["Survey 1", "Survey 2", "Survey 3", "Survey 4", "Survey 5"]; // Maximum allowed
-      const questionsArray = [
-        ["Q1"], ["Q2"], ["Q3"], ["Q4"], ["Q5"]
-      ];
-      const startTimes = Array.from({ length: 5 }, () => BigInt(Math.floor(Date.now() / 1000) + 60));
-      const endTimes = Array.from({ length: 5 }, () => BigInt(Math.floor(Date.now() / 1000) + 3660));
-
-      const initialCount = await surveyReveal.getSurveyCount();
-      const surveyIds = await surveyReveal.createMultipleSurveys(titles, questionsArray, startTimes, endTimes);
-      const finalCount = await surveyReveal.getSurveyCount();
-
-      expect(surveyIds.length).to.equal(5);
-      expect(Number(finalCount) - Number(initialCount)).to.equal(5);
-    });
-
-    it("Should maintain survey integrity in batch operations", async function () {
-      const titles = ["Batch Survey A", "Batch Survey B"];
-      const questionsArray = [
-        ["What is your favorite color?", "Rate our service"],
-        ["How often do you use our product?"]
-      ];
-      const startTimes = [BigInt(Math.floor(Date.now() / 1000) + 60), BigInt(Math.floor(Date.now() / 1000) + 120)];
-      const endTimes = [BigInt(Math.floor(Date.now() / 1000) + 3660), BigInt(Math.floor(Date.now() / 1000) + 3720)];
-
-      const surveyIds = await surveyReveal.createMultipleSurveys(titles, questionsArray, startTimes, endTimes);
-
-      // Verify each survey was created correctly
-      for (let i = 0; i < surveyIds.length; i++) {
-        const [title, questions, creator, startTime, endTime, responseCount, questionCount] =
-          await surveyReveal.getSurvey(surveyIds[i]);
-
-        expect(title).to.equal(titles[i]);
-        expect(questions).to.deep.equal(questionsArray[i]);
-        expect(creator).to.equal(signers.deployer.address);
-        expect(questionCount).to.equal(questionsArray[i].length);
-        expect(responseCount).to.equal(0);
-      }
-    });
-  });
-
-  describe("Contract Metadata", function () {
-    it("Should return correct contract version", async function () {
-      const version = await surveyReveal.getVersion();
-      expect(version).to.equal("1.1.0");
-    });
-
-    it("Should return supported operations", async function () {
-      const operations = await surveyReveal.getSupportedOperations();
-      expect(operations).to.deep.equal([
-        "encrypted_response",
-        "homomorphic_aggregation",
-        "decryption_reveal"
-      ]);
-    });
+    // Check response count
+    const survey = await surveyContract.getSurvey(0);
+    expect(survey[5]).to.equal(2); // responseCount
   });
 });

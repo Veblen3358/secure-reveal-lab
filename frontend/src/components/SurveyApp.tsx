@@ -5,8 +5,12 @@ import { CreateSurvey } from './survey/CreateSurvey';
 import { SurveyList } from './survey/SurveyList';
 import { SubmitResponse } from './survey/SubmitResponse';
 import { ViewResponses } from './survey/ViewResponses';
+import { ViewStatistics } from './survey/ViewStatistics';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from './ui/tabs';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from './ui/card';
+import { Lock, ClipboardList, Sparkles, PenLine, Eye, BarChart3 } from 'lucide-react';
 
-type Tab = 'list' | 'create' | 'submit' | 'view';
+type Tab = 'list' | 'create' | 'submit' | 'view' | 'statistics';
 
 export function SurveyApp() {
   const { isConnected } = useAccount();
@@ -23,85 +27,22 @@ export function SurveyApp() {
     setActiveTab('list');
   };
 
-  const headerStyle: React.CSSProperties = {
-    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-    padding: '32px 0',
-    marginBottom: '40px',
-    borderRadius: '0 0 24px 24px',
-    boxShadow: '0 8px 32px rgba(0,0,0,0.1)'
-  };
-
-  const containerStyle: React.CSSProperties = {
-    maxWidth: '1200px',
-    margin: '0 auto',
-    padding: '0 24px'
-  };
-
-  const headerContentStyle: React.CSSProperties = {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    color: 'white'
-  };
-
-  const titleStyle: React.CSSProperties = {
-    margin: 0,
-    fontSize: '32px',
-    fontWeight: '700',
-    letterSpacing: '-0.5px',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '12px'
-  };
-
-  const navStyle: React.CSSProperties = {
-    display: 'flex',
-    gap: '4px',
-    marginBottom: '32px',
-    background: 'white',
-    padding: '8px',
-    borderRadius: '12px',
-    boxShadow: '0 4px 16px rgba(0,0,0,0.1)',
-    border: '1px solid #e5e7eb'
-  };
-
-  const getTabStyle = (isActive: boolean): React.CSSProperties => ({
-    padding: '12px 24px',
-    border: 'none',
-    borderRadius: '8px',
-    fontSize: '16px',
-    fontWeight: '600',
-    cursor: isConnected || activeTab === 'list' ? 'pointer' : 'not-allowed',
-    transition: 'all 0.2s ease',
-    background: isActive
-      ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
-      : 'transparent',
-    color: isActive ? 'white' : '#6b7280',
-    opacity: (!isConnected && activeTab !== 'list' && !isActive) ? 0.5 : 1,
-    transform: isActive ? 'translateY(-1px)' : 'none',
-    boxShadow: isActive ? '0 4px 12px rgba(102, 126, 234, 0.3)' : 'none'
-  });
-
-  const welcomeCardStyle: React.CSSProperties = {
-    background: 'white',
-    borderRadius: '16px',
-    padding: '48px',
-    boxShadow: '0 4px 24px rgba(0,0,0,0.1)',
-    textAlign: 'center',
-    maxWidth: '600px',
-    margin: '0 auto'
+  const handleTabChange = (value: string) => {
+    setActiveTab(value as Tab);
   };
 
   return (
-    <div style={{ minHeight: '100vh', background: 'linear-gradient(to bottom, #f8fafc, #e2e8f0)' }}>
-      <header style={headerStyle}>
-        <div style={containerStyle}>
-          <div style={headerContentStyle}>
+    <div className="min-h-screen bg-gradient-to-b from-background to-muted/50">
+      {/* Header */}
+      <header className="bg-gradient-hero py-8 mb-10 rounded-b-3xl shadow-campaign">
+        <div className="max-w-7xl mx-auto px-6">
+          <div className="flex items-center justify-between text-white">
             <div>
-              <h1 style={titleStyle}>
-                🔒 SecureReveal
+              <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
+                <Lock className="h-8 w-8" />
+                SecureReveal
               </h1>
-              <p style={{ margin: '8px 0 0 0', opacity: 0.9, fontSize: '18px' }}>
+              <p className="mt-2 text-lg opacity-90">
                 Encrypted Survey System with Zama FHE
               </p>
             </div>
@@ -110,74 +51,93 @@ export function SurveyApp() {
         </div>
       </header>
 
-      <div style={containerStyle}>
+      <div className="max-w-7xl mx-auto px-6">
         {!isConnected ? (
-          <div style={welcomeCardStyle}>
-            <div style={{ fontSize: '64px', marginBottom: '24px' }}>🔐</div>
-            <h2 style={{ fontSize: '28px', marginBottom: '16px', color: '#1f2937' }}>
-              Welcome to SecureReveal
-            </h2>
-            <p style={{ fontSize: '16px', color: '#6b7280', lineHeight: '1.6', marginBottom: '24px' }}>
-              An encrypted survey system built with FHE (Fully Homomorphic Encryption).
-              Create surveys, submit encrypted responses, and reveal results securely.
-            </p>
-            <div style={{
-              background: 'linear-gradient(135deg, #667eea15 0%, #764ba215 100%)',
-              padding: '20px',
-              borderRadius: '12px',
-              marginTop: '24px'
-            }}>
-              <p style={{ margin: 0, color: '#667eea', fontWeight: '600' }}>
-                👆 Connect your wallet to get started
-              </p>
-            </div>
-          </div>
+          /* Welcome Card for Disconnected State */
+          <Card className="max-w-xl mx-auto text-center shadow-lg border-0 bg-gradient-to-br from-card to-muted/30">
+            <CardHeader className="pb-4">
+              <div className="text-6xl mb-4">🔐</div>
+              <CardTitle className="text-2xl">Welcome to SecureReveal</CardTitle>
+              <CardDescription className="text-base leading-relaxed">
+                An encrypted survey system built with FHE (Fully Homomorphic Encryption).
+                Create surveys, submit encrypted responses, and reveal results securely.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="bg-gradient-to-r from-primary/10 to-secondary/10 p-5 rounded-xl">
+                <p className="text-primary font-semibold flex items-center justify-center gap-2">
+                  <span>👆</span> Connect your wallet to get started
+                </p>
+              </div>
+            </CardContent>
+          </Card>
         ) : (
           <>
-            <nav style={navStyle}>
-              <button
-                onClick={() => setActiveTab('list')}
-                style={getTabStyle(activeTab === 'list')}
-              >
-                📋 Survey List
-              </button>
-              <button
-                onClick={() => setActiveTab('create')}
-                style={getTabStyle(activeTab === 'create')}
-                disabled={!isConnected}
-              >
-                ✨ Create Survey
-              </button>
-              <button
-                onClick={() => setActiveTab('submit')}
-                style={getTabStyle(activeTab === 'submit')}
-                disabled={!isConnected}
-              >
-                ✍️ Submit Response
-              </button>
-              <button
-                onClick={() => setActiveTab('view')}
-                style={getTabStyle(activeTab === 'view')}
-                disabled={!isConnected}
-              >
-                👁️ View Responses
-              </button>
-            </nav>
+            {/* Navigation Tabs */}
+            <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
+              <TabsList className="w-full h-auto p-2 mb-8 grid grid-cols-5 gap-2">
+                <TabsTrigger 
+                  value="list" 
+                  className="flex items-center gap-2 py-3.5 px-5 text-base font-semibold transition-all duration-300 data-[state=active]:scale-105"
+                >
+                  <ClipboardList className="h-4 w-4 transition-transform duration-300 data-[state=active]:scale-110" />
+                  Survey List
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="create" 
+                  disabled={!isConnected}
+                  className="flex items-center gap-2 py-3.5 px-5 text-base font-semibold transition-all duration-300 data-[state=active]:scale-105 disabled:opacity-40"
+                >
+                  <Sparkles className="h-4 w-4 transition-transform duration-300 data-[state=active]:scale-110" />
+                  Create Survey
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="submit" 
+                  disabled={!isConnected}
+                  className="flex items-center gap-2 py-3.5 px-5 text-base font-semibold transition-all duration-300 data-[state=active]:scale-105 disabled:opacity-40"
+                >
+                  <PenLine className="h-4 w-4 transition-transform duration-300 data-[state=active]:scale-110" />
+                  Submit Response
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="view" 
+                  disabled={!isConnected}
+                  className="flex items-center gap-2 py-3.5 px-5 text-base font-semibold transition-all duration-300 data-[state=active]:scale-105 disabled:opacity-40"
+                >
+                  <Eye className="h-4 w-4 transition-transform duration-300 data-[state=active]:scale-110" />
+                  View Responses
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="statistics" 
+                  disabled={!isConnected}
+                  className="flex items-center gap-2 py-3.5 px-5 text-base font-semibold transition-all duration-300 data-[state=active]:scale-105 disabled:opacity-40"
+                >
+                  <BarChart3 className="h-4 w-4 transition-transform duration-300 data-[state=active]:scale-110" />
+                  Statistics
+                </TabsTrigger>
+              </TabsList>
 
-            <div style={{ minHeight: '400px' }}>
-              {activeTab === 'list' && <SurveyList onSurveySelect={handleSurveySelect} />}
-              {activeTab === 'create' && <CreateSurvey onSurveyCreated={handleSurveyCreated} />}
-              {activeTab === 'submit' && <SubmitResponse selectedSurveyId={selectedSurveyId} />}
-              {activeTab === 'view' && <ViewResponses />}
-            </div>
+              <div className="min-h-[400px]">
+                <TabsContent value="list" className="mt-0">
+                  <SurveyList onSurveySelect={handleSurveySelect} />
+                </TabsContent>
+                <TabsContent value="create" className="mt-0">
+                  <CreateSurvey onSurveyCreated={handleSurveyCreated} />
+                </TabsContent>
+                <TabsContent value="submit" className="mt-0">
+                  <SubmitResponse selectedSurveyId={selectedSurveyId} />
+                </TabsContent>
+                <TabsContent value="view" className="mt-0">
+                  <ViewResponses />
+                </TabsContent>
+                <TabsContent value="statistics" className="mt-0">
+                  <ViewStatistics />
+                </TabsContent>
+              </div>
+            </Tabs>
           </>
         )}
       </div>
     </div>
   );
 }
-
-
-
-
-

@@ -8,11 +8,6 @@ import {SepoliaConfig} from "@fhevm/solidity/config/ZamaConfig.sol";
 /// @notice A survey system where users can submit encrypted answers and reveal them later
 /// @dev Uses FHE encryption for privacy-preserving survey responses
 contract SurveyReveal is SepoliaConfig {
-    // Constants for gas optimization
-    uint256 private constant MAX_QUESTIONS = 10;
-    uint256 private constant MIN_QUESTIONS = 1;
-    uint256 private constant MAX_TITLE_LENGTH = 200;
-
     struct Survey {
         string title;
         string[] questions; // Dynamic array of questions
@@ -48,6 +43,12 @@ contract SurveyReveal is SepoliaConfig {
     mapping(uint256 => address) private _requestToUser;
     mapping(uint256 => uint256) private _requestToSurvey;
 
+    // For aggregation statistics (homomorphic operations)
+    // Store encrypted sum for each question
+    mapping(uint256 => mapping(uint8 => euint8)) private _encryptedSums;
+    // Store respondent addresses for iteration
+    mapping(uint256 => address[]) private _respondents;
+
     uint256 private _surveyCount;
 
     // Events
@@ -55,12 +56,6 @@ contract SurveyReveal is SepoliaConfig {
     event ResponseSubmitted(uint256 indexed surveyId, address indexed respondent, uint8 answerCount);
     event DecryptionRequested(uint256 indexed surveyId, address indexed respondent, uint256 requestId);
     event ResponseRevealed(uint256 indexed surveyId, address indexed respondent, uint8[] answers);
-
-    // Modifiers
-    modifier pollExists(uint256 surveyId) {
-        require(surveyId < _surveyCount, "Invalid survey");
-        _;
-    }
 
     /// @notice Create a new survey with custom questions
     /// @param title The survey title
@@ -74,8 +69,8 @@ contract SurveyReveal is SepoliaConfig {
         uint64 startTime,
         uint64 endTime
     ) external returns (uint256 surveyId) {
-        require(bytes(title).length > 0 && bytes(title).length <= MAX_TITLE_LENGTH, "Invalid title length");
-        require(questions.length >= MIN_QUESTIONS && questions.length <= MAX_QUESTIONS, "Invalid question count");
+        require(bytes(title).length > 0, "Empty title");
+        require(questions.length > 0 && questions.length <= 10, "Invalid question count");
         require(endTime > startTime && endTime > block.timestamp, "Invalid times");
 
         surveyId = _surveyCount++;
@@ -128,6 +123,23 @@ contract SurveyReveal is SepoliaConfig {
 
         hasResponded[surveyId][msg.sender] = true;
         s.responseCount++;
+        
+        // Add respondent to list for statistics
+        _respondents[surveyId].push(msg.sender);
+        
+        // Update encrypted sums using homomorphic addition
+        for (uint256 i = 0; i < encAnswers.length; i++) {
+            euint8 answer = FHE.fromExternal(encAnswers[i], proofs[i]);
+            // Initialize sum if first response
+            if (s.responseCount == 1) {
+                _encryptedSums[surveyId][uint8(i)] = answer;
+                FHE.allowThis(_encryptedSums[surveyId][uint8(i)]);
+            } else {
+                // Homomorphic addition: sum = sum + answer
+                _encryptedSums[surveyId][uint8(i)] = FHE.add(_encryptedSums[surveyId][uint8(i)], answer);
+                FHE.allowThis(_encryptedSums[surveyId][uint8(i)]);
+            }
+        }
 
         emit ResponseSubmitted(surveyId, msg.sender, uint8(encAnswers.length));
     }
@@ -199,7 +211,6 @@ contract SurveyReveal is SepoliaConfig {
         return true;
     }
 
-
     /// @notice Get survey details
     /// @param surveyId The survey ID
     function getSurvey(uint256 surveyId) external view returns (
@@ -219,55 +230,6 @@ contract SurveyReveal is SepoliaConfig {
     /// @notice Get total number of surveys
     function getSurveyCount() external view returns (uint256) {
         return _surveyCount;
-    }
-
-    /// @notice Get survey statistics
-    /// @param surveyId The survey ID
-    /// @return responseCount Total number of responses
-    /// @return isActive Whether survey is currently active
-    /// @return timeRemaining Seconds remaining until survey ends (0 if ended)
-    /// @return questionCount Number of questions in the survey
-    function getSurveyStats(uint256 surveyId)
-        external
-        view
-        pollExists(surveyId)
-        returns (uint256 responseCount, bool isActive, uint256 timeRemaining, uint8 questionCount)
-    {
-        Survey storage s = _surveys[surveyId];
-        responseCount = s.responseCount;
-        questionCount = s.questionCount;
-
-        uint256 currentTime = block.timestamp;
-        if (currentTime >= s.startTime && currentTime <= s.endTime) {
-            isActive = true;
-            timeRemaining = s.endTime - currentTime;
-        } else {
-            isActive = false;
-            timeRemaining = 0;
-        }
-    }
-
-    /// @notice Emergency pause survey for creator
-    /// @param surveyId The survey ID to pause
-    function emergencyPause(uint256 surveyId) external pollExists(surveyId) {
-        Survey storage s = _surveys[surveyId];
-        require(msg.sender == s.creator, "Only survey creator can pause");
-
-        // Mark survey as ended to prevent further responses
-        s.endTime = block.timestamp;
-        s.isRevealed = true;
-    }
-
-    /// @notice Get survey creator
-    /// @param surveyId The survey ID
-    /// @return creator Address of the survey creator
-    function getSurveyCreator(uint256 surveyId)
-        external
-        view
-        pollExists(surveyId)
-        returns (address creator)
-    {
-        return _surveys[surveyId].creator;
     }
 
     /// @notice Get encrypted response (returns bytes32 handles)
@@ -307,59 +269,32 @@ contract SurveyReveal is SepoliaConfig {
         return _revealedResponses[surveyId][respondent].respondent != address(0);
     }
 
-    /// @notice Create multiple surveys in a single transaction (gas optimized)
-    /// @param titles Array of survey titles
-    /// @param questionsArray Array of question arrays for each survey
-    /// @param startTimes Array of start times for each survey
-    /// @param endTimes Array of end times for each survey
-    /// @return surveyIds Array of created survey IDs
-    function createMultipleSurveys(
-        string[] calldata titles,
-        string[][] calldata questionsArray,
-        uint64[] calldata startTimes,
-        uint64[] calldata endTimes
-    ) external returns (uint256[] memory surveyIds) {
-        require(titles.length == questionsArray.length &&
-                questionsArray.length == startTimes.length &&
-                startTimes.length == endTimes.length, "Array length mismatch");
-        require(titles.length > 0 && titles.length <= 5, "Invalid number of surveys (1-5)");
-
-        surveyIds = new uint256[](titles.length);
-
-        for (uint256 i = 0; i < titles.length; i++) {
-            surveyIds[i] = _surveyCount++;
-            Survey storage s = _surveys[surveyIds[i]];
-
-            require(bytes(titles[i]).length > 0 && bytes(titles[i]).length <= MAX_TITLE_LENGTH, "Invalid title");
-            require(questionsArray[i].length >= MIN_QUESTIONS && questionsArray[i].length <= MAX_QUESTIONS, "Invalid questions");
-
-            s.title = titles[i];
-            s.questions = questionsArray[i];
-            s.creator = msg.sender;
-            s.startTime = startTimes[i];
-            s.endTime = endTimes[i];
-            s.isRevealed = false;
-            s.responseCount = 0;
-            s.questionCount = uint8(questionsArray[i].length);
-
-            emit SurveyCreated(surveyIds[i], titles[i], msg.sender, uint8(questionsArray[i].length));
-        }
+    /// @notice Get all respondents for a survey (for statistics)
+    /// @param surveyId The survey ID
+    /// @return respondents Array of respondent addresses
+    function getRespondents(uint256 surveyId) external view returns (address[] memory) {
+        require(surveyId < _surveyCount, "Invalid survey");
+        return _respondents[surveyId];
     }
 
-    /// @notice Get contract version for compatibility checks
-    /// @return version Contract version string
-    function getVersion() external pure returns (string memory version) {
-        return "1.1.0";
-    }
-
-    /// @notice Get supported FHE operations
-    /// @return supportedOperations Array of supported operation names
-    function getSupportedOperations() external pure returns (string[] memory supportedOperations) {
-        supportedOperations = new string[](3);
-        supportedOperations[0] = "encrypted_response";
-        supportedOperations[1] = "homomorphic_aggregation";
-        supportedOperations[2] = "decryption_reveal";
-        return supportedOperations;
+    /// @notice Get encrypted sum for a question (for calculating average)
+    /// @param surveyId The survey ID
+    /// @param questionIndex The question index (0-based)
+    /// @return sumHandle The encrypted sum as bytes32 handle
+    /// @dev This returns the encrypted sum, which can be decrypted to get the total
+    ///      Average = decrypted(sum) / responseCount
+    function getEncryptedSum(uint256 surveyId, uint8 questionIndex) 
+        external 
+        view 
+        returns (bytes32 sumHandle) 
+    {
+        require(surveyId < _surveyCount, "Invalid survey");
+        Survey storage s = _surveys[surveyId];
+        require(questionIndex < s.questionCount, "Invalid question index");
+        require(s.responseCount > 0, "No responses");
+        
+        euint8 sum = _encryptedSums[surveyId][questionIndex];
+        return FHE.toBytes32(sum);
     }
 }
 
